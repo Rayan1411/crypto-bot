@@ -1,7 +1,7 @@
 # ==============================================================================
-# CRYPTO TRADING BOT: 24/7 FREE WEB SERVICE EDITION
+# CRYPTO TRADING BOT: 24/7 ADVANCED WEB DASHBOARD EDITION
 # Platform: Render.com (Free Web Service Tier)
-# Integration: Alpaca Crypto API + Flask Keep-Alive Server
+# Integration: Alpaca Crypto API + Rich Real-Time Web Dashboard
 # ==============================================================================
 
 import os
@@ -14,40 +14,226 @@ import numpy as np
 from flask import Flask
 
 # ------------------------------------------------------------------------------
-# 1. إعداد خادم الويب (Flask Server) لإتاحة الخطة المجانية على Render
+# 1. إعداد خادم الويب (Flask Server) مع لوحة تحكم تفصيلية وتحديث تلقائي
 # ------------------------------------------------------------------------------
 app = Flask(__name__)
 
-# متغيرات عامة لعرض حالة البوت الحية عبر صفحة الويب
+# متغيرات عامة لعرض كافة تفاصيل الصفقات المفتوحة مباشرة عبر المتصفح
 bot_status = {
     "status": "Starting",
     "last_cycle": "None",
     "regime": "Checking...",
+    "btc_price": 0.0,
+    "btc_sma200": 0.0,
     "total_invested": 0.0,
     "active_positions_count": 0,
-    "message": "Initializing trading bot..."
+    "message": "Initializing trading bot...",
+    "positions_list": []  # تفاصيل كل صفقة مفتوحة
 }
 
 @app.route('/')
 def home():
     """
-    صفحة فحص الحالة الصحية للبوت (Health Check)
-    تُبقي السيرفر مستيقظاً 24/7 عند إرسال طلب إليها
+    لوحة تحكم تفاعلية متكاملة تعرض أسعار العملات وتفاصيل الأرباح وتتحدث تلقائياً
     """
+    # بناء صفوف جدول الصفقات المفتوحة
+    rows_html = ""
+    if bot_status["positions_list"]:
+        for pos in bot_status["positions_list"]:
+            pnl_val = pos["unrealized_pl"]
+            pnl_pct = pos["unrealized_plpc"] * 100
+            
+            # تلوين الأرباح بالأخضر والخسائر بالأحمر
+            color = "#10b981" if pnl_val >= 0 else "#ef4444"
+            sign = "+" if pnl_val >= 0 else ""
+            
+            # حساب المتبقي على هدف الربح (50$)
+            target_diff = 50.0 - pnl_val
+            target_str = f"حققت الهدف!" if target_diff <= 0 else f"متبقي ${target_diff:.2f}"
+            
+            rows_html += f"""
+            <tr style="border-bottom: 1px solid #334155;">
+                <td style="padding: 12px; font-weight: bold; color: #38bdf8;">{pos['symbol']}</td>
+                <td style="padding: 12px;">${pos['market_value']:,.2f}</td>
+                <td style="padding: 12px;">${pos['entry_price']:,.4f}</td>
+                <td style="padding: 12px;">${pos['current_price']:,.4f}</td>
+                <td style="padding: 12px; color: {color}; font-weight: bold;">{sign}${pnl_val:,.2f}</td>
+                <td style="padding: 12px; color: {color}; font-weight: bold;">{sign}{pnl_pct:.2f}%</td>
+                <td style="padding: 12px; font-size: 13px; color: #94a3b8;">{target_str}</td>
+            </tr>
+            """
+    else:
+        rows_html = """
+        <tr>
+            <td colspan="7" style="padding: 20px; text-align: center; color: #94a3b8;">
+                لا توجد صفقات مفتوحة حالياً (رأس المال متوفر في وضع النقد / Cash).
+            </td>
+        </tr>
+        """
+
+    remaining_cap = max(0.0, 10000.0 - bot_status['total_invested'])
+
     return f"""
-    <html>
-    <head><title>Crypto Trading Bot Status</title></head>
-    <body style="font-family: Arial; padding: 30px; background-color: #0f172a; color: #f8fafc;">
-        <h2 style="color: #10b981;">✓ Crypto Trading Bot is ONLINE (24/7 Free Tier)</h2>
-        <hr style="border-color: #334155;">
-        <p><b>حالة النظام:</b> {bot_status['status']}</p>
-        <p><b>آخر فحص وتحديث:</b> {bot_status['last_cycle']}</p>
-        <p><b>حالة السوق (BTC Regime):</b> {bot_status['regime']}</p>
-        <p><b>إجمالي المبلغ المستثمر:</b> ${bot_status['total_invested']:,.2f} / $10,000.00</p>
-        <p><b>عدد الصفقات المفتوحة:</b> {bot_status['active_positions_count']} / 3</p>
-        <p><b>آخر رسالة:</b> {bot_status['message']}</p>
-        <hr style="border-color: #334155;">
-        <p style="color: #94a3b8; font-size: 13px;">Managed autonomously on Render.com & Alpaca Markets</p>
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <!-- تحديث تلقائي للصفحة كل 15 ثانية لمتابعة الأرباح لحظة بلحظة -->
+        <meta http-equiv="refresh" content="15">
+        <title>لوحة تداول العملات الرقمية الحية</title>
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                background-color: #0b1120;
+                color: #f1f5f9;
+                margin: 0;
+                padding: 20px;
+            }}
+            .container {{
+                max-width: 1000px;
+                margin: auto;
+            }}
+            .card {{
+                background-color: #1e293b;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+                border: 1px solid #334155;
+            }}
+            .header {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                border-bottom: 1px solid #334155;
+                padding-bottom: 15px;
+                margin-bottom: 15px;
+            }}
+            .badge-live {{
+                background-color: #065f46;
+                color: #34d399;
+                padding: 6px 14px;
+                border-radius: 20px;
+                font-size: 13px;
+                font-weight: bold;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }}
+            .stats-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+                margin-bottom: 20px;
+            }}
+            .stat-box {{
+                background-color: #0f172a;
+                padding: 15px;
+                border-radius: 8px;
+                border: 1px solid #334155;
+            }}
+            .stat-title {{
+                color: #94a3b8;
+                font-size: 13px;
+                margin-bottom: 5px;
+            }}
+            .stat-value {{
+                font-size: 20px;
+                font-weight: bold;
+                color: #f8fafc;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                text-align: right;
+            }}
+            th {{
+                background-color: #0f172a;
+                padding: 12px;
+                color: #94a3b8;
+                font-size: 13px;
+            }}
+            .pulse {{
+                width: 8px;
+                height: 8px;
+                background-color: #34d399;
+                border-radius: 50%;
+                display: inline-block;
+                box-shadow: 0 0 8px #34d399;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="card">
+                <div class="header">
+                    <div>
+                        <h2 style="margin: 0; color: #38bdf8;">⚡ لوحة تحكم بوت الكريبتو (24/7 مباشر)</h2>
+                        <span style="font-size: 13px; color: #94a3b8;">تحديث حي تلقائي كل 15 ثانية | Alpaca API</span>
+                    </div>
+                    <div>
+                        <span class="badge-live"><span class="pulse"></span> متصل ونشط 24/7</span>
+                    </div>
+                </div>
+
+                <!-- شبكة الإحصائيات العامة -->
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-title">إجمالي المستثمر حالياً</div>
+                        <div class="stat-value" style="color: #38bdf8;">${bot_status['total_invested']:,.2f}</div>
+                        <span style="font-size: 12px; color: #94a3b8;">من سقف $10,000.00</span>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-title">السيولة النقدية المتبقية</div>
+                        <div class="stat-value">${remaining_cap:,.2f}</div>
+                        <span style="font-size: 12px; color: #94a3b8;">جاهزة للفرص الجديدة</span>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-title">حالة السوق (BTC Regime)</div>
+                        <div class="stat-value" style="color: #10b981;">{bot_status['regime']}</div>
+                        <span style="font-size: 12px; color: #94a3b8;">BTC: ${bot_status['btc_price']:,.0f} | SMA200: ${bot_status['btc_sma200']:,.0f}</span>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-title">الصفقات المفتوحة</div>
+                        <div class="stat-value">{bot_status['active_positions_count']} <span style="font-size: 14px; color: #94a3b8;">/ 3 صفقات</span></div>
+                        <span style="font-size: 12px; color: #94a3b8;">الهدف: +$50 | الوقف: -10%</span>
+                    </div>
+                </div>
+
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 15px;">
+                    <b>آخر فحص للدورة:</b> {bot_status['last_cycle']} | <b>رسالة النظام:</b> {bot_status['message']}
+                </div>
+            </div>
+
+            <!-- جدول الصفقات المفتوحة بالتفصيل -->
+            <div class="card" style="padding: 0; overflow-x: auto;">
+                <div style="padding: 18px; border-bottom: 1px solid #334155;">
+                    <h3 style="margin: 0; color: #f8fafc;">تفاصيل الصفقات المفتوحة وأرباحها اللحظية</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>العملة</th>
+                            <th>قيمة الصفقة</th>
+                            <th>سعر الدخول</th>
+                            <th>السعر الحالي</th>
+                            <th>الربح اللحظي ($)</th>
+                            <th>النسبة المئوية (%)</th>
+                            <th>الهدف (+50$)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_html}
+                    </tbody>
+                </table>
+            </div>
+
+            <p style="text-align: center; color: #64748b; font-size: 12px;">
+                النظام يعمل آلياً بالكامل | يتم جني الأرباح تلقائياً فور بلوغ +$50 وإغلاق الصفقة وتجديد الفرص.
+            </p>
+        </div>
     </body>
     </html>
     """, 200
@@ -61,7 +247,6 @@ PAPER_TRADING = os.environ.get('PAPER_TRADING', 'True').lower() in ('true', '1',
 
 if not API_KEY or not SECRET_KEY:
     print("[ERROR] ALPACA_KEY or ALPACA_SECRET is missing from Environment Variables!", flush=True)
-    # لا نوقف التطبيق فوراً لكي تظهر صفحة الويب وتبين الخطأ في Render
     bot_status["status"] = "Error: Missing API Keys"
 
 from alpaca.trading.client import TradingClient
@@ -116,10 +301,10 @@ def fetch_daily_closes(symbols, days=250):
 def check_market_regime(prices_df):
     btc_series = prices_df[BENCHMARK_SYMBOL].dropna()
     if len(btc_series) < REGIME_SMA_WINDOW:
-        return True
+        return True, 0.0, 0.0
     sma200 = btc_series.rolling(window=REGIME_SMA_WINDOW).mean().iloc[-1]
     current_btc = btc_series.iloc[-1]
-    return current_btc > sma200
+    return (current_btc > sma200), current_btc, sma200
 
 def get_top_momentum_symbols(prices_df):
     ret_21d = (prices_df.iloc[-1] / prices_df.iloc[-MOMENTUM_WINDOW_DAYS]) - 1.0
@@ -128,15 +313,17 @@ def get_top_momentum_symbols(prices_df):
     return ranked
 
 # ------------------------------------------------------------------------------
-# 5. دوال متابعة الصفقات وجني الأرباح واقتناص الفرص
+# 5. دوال متابعة الصفقات وجني الأرباح وتحديث بيانات لوحة الويب
 # ------------------------------------------------------------------------------
 def monitor_and_manage_positions():
     positions = trading_client.get_all_positions()
     total_invested = 0.0
     active_symbols = []
+    positions_summary_list = []
     
     if not positions:
         print("  [المراكز الحالية]: لا توجد صفقات مفتوحة حالياً.", flush=True)
+        bot_status["positions_list"] = []
         return 0.0, []
         
     print("\n  [متابعة الصفقات المفتوحة]:", flush=True)
@@ -153,6 +340,17 @@ def monitor_and_manage_positions():
         unrealized_pl = float(p.unrealized_pl)
         unrealized_plpc = float(p.unrealized_plpc)
         
+        # حفظ تفاصيل المركز لتقديمه في صفحة الويب
+        pos_info = {
+            "symbol": sym,
+            "market_value": market_val,
+            "entry_price": entry_price,
+            "current_price": curr_price,
+            "unrealized_pl": unrealized_pl,
+            "unrealized_plpc": unrealized_plpc
+        }
+        positions_summary_list.append(pos_info)
+        
         # 1. فحص هدف الربح (+50 دولار)
         if unrealized_pl >= TAKE_PROFIT_DOLLARS:
             status_note = f"🎯 جني ربح (+${unrealized_pl:,.2f}) -> إغلاق المركز"
@@ -161,6 +359,7 @@ def monitor_and_manage_positions():
                 trading_client.close_position(sym)
                 total_invested -= market_val
                 active_symbols.remove(sym)
+                positions_summary_list.remove(pos_info)
                 print(f"  ✓ تم جني الأرباح بنجاح لصفقة {sym}.", flush=True)
             except Exception as e:
                 print(f"  ! خطأ في إغلاق الصفقة {sym}: {e}", flush=True)
@@ -174,6 +373,7 @@ def monitor_and_manage_positions():
                 trading_client.close_position(sym)
                 total_invested -= market_val
                 active_symbols.remove(sym)
+                positions_summary_list.remove(pos_info)
                 print(f"  ✓ تم تفعيل وقف الخسارة لصفقة {sym}.", flush=True)
             except Exception as e:
                 print(f"  ! خطأ في إغلاق الصفقة {sym}: {e}", flush=True)
@@ -182,6 +382,8 @@ def monitor_and_manage_positions():
         else:
             print(f"  {sym:<10} | ${market_val:<9.2f} | ${entry_price:<9.2f} | ${curr_price:<9.2f} | {unrealized_pl:+,.2f}${'':<6} | {unrealized_plpc*100:+,.2f}%{'':<3} | قيد المراقبة", flush=True)
             
+    # تحديث القائمة في لوحة الويب
+    bot_status["positions_list"] = positions_summary_list
     return total_invested, active_symbols
 
 def search_and_enter_new_trades(total_invested, active_symbols, prices_df):
@@ -190,7 +392,7 @@ def search_and_enter_new_trades(total_invested, active_symbols, prices_df):
     if remaining_budget < POSITION_SIZE * 0.9 or len(active_symbols) >= MAX_ACTIVE_POSITIONS:
         return
         
-    is_bull = check_market_regime(prices_df)
+    is_bull, btc_cur, btc_sma = check_market_regime(prices_df)
     if not is_bull:
         print("  [تنبيه السوق]: البيتكوين تحت متوسط 200 يوم. لن يتم فتح صفقات جديدة حتى يستقر السوق.", flush=True)
         return
@@ -229,7 +431,7 @@ def search_and_enter_new_trades(total_invested, active_symbols, prices_df):
             break
 
 # ------------------------------------------------------------------------------
-# 6. الخيط المستقل لتشغيل حلقة التداول في الخلفية (Background Thread)
+# 6. الخيط المستقل لتشغيل حلقة التداول في الخلفية
 # ------------------------------------------------------------------------------
 def run_trading_worker():
     print("[Worker] بدء تشغيل محرك التداول الآلي في الخلفية...", flush=True)
@@ -248,16 +450,19 @@ def run_trading_worker():
                 cached_prices = fetch_daily_closes(list(set(SYMBOLS_UNIVERSE + [BENCHMARK_SYMBOL])), days=250)
                 last_fetch = time.time()
                 
+            is_bull, btc_cur, btc_sma = check_market_regime(cached_prices)
             total_inv, active_syms = monitor_and_manage_positions()
             search_and_enter_new_trades(total_inv, active_syms, cached_prices)
             
             # تحديث لوحة حالة الويب
-            bot_status["status"] = "Active & Running (24/7)"
+            bot_status["status"] = "Active & Trading (24/7)"
             bot_status["last_cycle"] = now_str
-            bot_status["regime"] = "Bull (Trading Allowed)" if check_market_regime(cached_prices) else "Bear (Capital Protected)"
+            bot_status["regime"] = "Bull (سوق صاعد - الشراء مسموح)" if is_bull else "Bear (سوق هابط - حماية رأس المال)"
+            bot_status["btc_price"] = btc_cur
+            bot_status["btc_sma200"] = btc_sma
             bot_status["total_invested"] = total_inv
             bot_status["active_positions_count"] = len(active_syms)
-            bot_status["message"] = f"Monitoring {len(active_syms)} positions. Next check in 30s."
+            bot_status["message"] = f"مراقبة {len(active_syms)} صفقات. الفحص القادم بعد 30 ثانية."
             
         except Exception as e:
             print(f"  ! تنبيه أثناء الدورة: {e}", flush=True)
@@ -272,11 +477,9 @@ if __name__ == "__main__":
     if not API_KEY or not SECRET_KEY:
         print("[HALT] يرجى تعيين ALPACA_KEY و ALPACA_SECRET في إعدادات Render!", flush=True)
     else:
-        # تشغيل محرك التداول في خيط منفصل بالخلفية
         worker_thread = threading.Thread(target=run_trading_worker, daemon=True)
         worker_thread.start()
         
-    # تشغيل خادم الويب على المنفذ المحدد من قِبل Render (افتراضياً 10000)
     port = int(os.environ.get("PORT", 10000))
     print(f"[Web Server] خادم الويب يعمل على المنفذ {port}...", flush=True)
     app.run(host="0.0.0.0", port=port)
